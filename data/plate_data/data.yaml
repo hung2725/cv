@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 1
+names: ['license_plate']
+
+roboflow:
+  workspace: computer-vison-4zhos
+  project: license-plate-recognition-kvr7y
+  version: 11
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/computer-vison-4zhos/license-plate-recognition-kvr7y/dataset/11
