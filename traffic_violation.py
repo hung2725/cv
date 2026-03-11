@@ -35,8 +35,7 @@ class ViolationChecker:
             
             # ĐIỀU KIỆN VI PHAM:
             # - Đèn đang đỏ
-            # - Frame trước: xe ở DƯỚI vạch (prev_y2 >= stop_line_y)
-            # - Frame này: xe đã ĐÈ/VƯỢT lên vạch (y2 < stop_line_y)
+            # - xe đã ĐÈ/VƯỢT lên vạch (y2 < stop_line_y)
             if is_red and prev_y2 >= self.stop_line_y and y2 < self.stop_line_y:
                 if v_id not in self.violated_ids:
                     self.stats[v_type] = self.stats.get(v_type, 0) + 1
@@ -57,5 +56,6 @@ class ViolationChecker:
         for vt, count in self.stats.items():
             cv2.putText(frame, f"- {vt.upper()}: {count} xe", (50, y_pos), 0, 0.6, (255, 255, 255), 1)
             y_pos += 30
+
 
         return frame
