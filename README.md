@@ -1,204 +1,70 @@
-# Hệ thống phát hiện vi phạm giao thông (YOLO)
+# Hệ Thống Giám Sát Giao Thông và Phát Hiện Vi Phạm
 
-### 1. Giới thiệu
+Đây là hệ thống tự động nhận diện phương tiện giao thông và trạng thái đèn tín hiệu từ video để phát hiện lỗi vi phạm (vượt đèn đỏ), sử dụng mô hình học sâu YOLO.
 
-Dự án này xây dựng một **hệ thống giám sát giao thông tự động** từ video, có thể:
-- Phát hiện các phương tiện tham gia giao thông (xe máy, ô tô, ...).
-- Nhận diện **trạng thái đèn giao thông** (đỏ/xanh/...).
-- Kiểm tra **vi phạm vượt đèn đỏ**.
-- Kiểm tra **đội mũ bảo hiểm** đối với xe máy.
-- Lưu lại **ảnh bằng chứng** và phát âm thanh cảnh báo khi phát hiện vi phạm.
+## 1. Công nghệ sử dụng
 
-Toàn bộ pipeline được hiện thực bằng Python và các thư viện thị giác máy tính/deep learning hiện đại.
+- **Ngôn ngữ lập trình**: Python
+- **Thư viện chính**:
+  - `ultralytics` (YOLO): Sử dụng cho việc nhận diện đối tượng (Object Detection) và theo dõi đối tượng (Object Tracking). Hệ thống tải các file mô hình như `vehicle.pt` để nhận diện xe, và `traffic_light.pt` để nhận diện trạng thái đèn giao thông.
+  - `opencv-python` (`cv2`): Sử dụng để xử lý video, đọc từng frame, vẽ khung bounding box, vẽ vạch kẻ và viết thông tin lên khung hình giao diện người dùng.
+  - `numpy`: Hỗ trợ tính toán xử lý ma trận và hình ảnh bên dưới.
 
----
+## 2. Cách hoạt động của hệ thống
 
-### 2. Công nghệ sử dụng
+Hệ thống hoạt động dựa trên luồng xử lý tuần tự qua từng frame hình ảnh của luồng video:
 
-- **Ngôn ngữ**: Python 3
+1. **Khởi tạo và cấu hình (`main.py`)**: 
+   - Đọc đối tượng video qua OpenCV.
+   - Khởi tạo đường kẻ ngang (vạch dừng ảo) thông qua tham số `stop_line_y` trong `ViolationChecker`. Hàm này sẽ quyết định vạch dừng thực tế trên video.
 
-- **Deep Learning / Object Detection**
-  - `ultralytics` (YOLO) để phát hiện:
-    - Phương tiện giao thông (`vehicle.pt`).
-    - Đèn giao thông (`traffic_light.pt`).
-    - Mũ bảo hiểm (`helmet.pt`).
-  - `PyTorch` là backend cho YOLO (được tích hợp sẵn trong `ultralytics`).
+2. **Nhận diện và phân loại (`detection.py`)**:
+   - Sử dụng định hình mô hình xe (`vehicle.pt`) kết hợp với chế độ tracking (`track`) của YOLO để nhận diện và theo dõi tọa độ của từng vị trí xe hơi/xe máy. Mỗi xe được gắn một ID duy nhất (`v_res.boxes.id`) để liên kết xuyên suốt các frame hình.
+   - Mô hình phân loại tín hiệu đèn (`traffic_light.pt`) sẽ trích xuất ra trạng thái hiện tại của đèn tín hiệu (Ví dụ: `red`, `green`,... ).
 
-- **Xử lý ảnh / video**
-  - `OpenCV` (`cv2`):
-    - Đọc video đầu vào (`VideoCapture`).
-    - Vẽ bounding box, text, vạch dừng ảo.
-    - Hiển thị frame kết quả lên màn hình.
+3. **Kiểm tra điều kiện và xử lý vi phạm (`traffic_violation.py`)**:
+   - **Xác định tín hiệu đèn**: Nếu chuỗi trạng thái đèn chứa `"red"` hoặc `"0"`, hệ thống xem như đèn đỏ và chuyển vạch dừng giới hạn sang màu đỏ.
+   - **Xác định hành vi vượt vạch**: Thuật toán lưu trữ toạ độ `y2` (cạnh dưới cùng của box nhận diện chiếc xe) ở lần xuất hiện trước đó bằng biến `pre_position`.
+   - Tiến hành đánh giá: Nếu đang là **đèn đỏ**, và xe từ frame trước đang ở phía ngoài vạch (`prev_y2 >= stop_line_y`), nhưng ở frame ngay sau đuôi xe đã ở qua vạch này định dạng (`y2 < stop_line_y`), thì hệ thống gán nhãn chiếc xe có ID này đã vi phạm lỗi vượt vạch đèn đỏ.
+   - Hiển thị và thống kê: Xe bị đánh dấu vi phạm sẽ bị đóng khung màu đỏ, chữ `VI PHAM: [LOẠI XE]` chạy theo. Đồng thời bảng thống kê (góc trái trên màn hình) tự động tăng đếm số lượt vi phạm.
 
-- **OCR / nhận dạng ký tự (tiềm năng mở rộng)**
-  - `easyocr`, `pytesseract` (có trong `requirements.txt`) để đọc biển số xe, phù hợp với model `plate` trong phần huấn luyện (nếu triển khai).
+4. **Hiển thị trực quan**: Cửa sổ OpenCV sẽ chiếu video theo thời gian thực đè cùng nhận diện để trực quan diễn biến theo dõi.
 
-- **Khác**
-  - `numpy` cho xử lý ma trận/ảnh.
-  - `winsound` (trên Windows) để phát âm thanh cảnh báo khi có vi phạm.
+## 3. Hướng dẫn chạy dự án
 
-Xem chi tiết danh sách phụ thuộc trong `requirements.txt`.
+### Yêu cầu tiên quyết
+Bạn cần chắc chắn đã cài đặt sẵn Python 3.
 
----
+### Bước 1: Khởi tạo môi trường ảo (Khuyến nghị)
+Sử dụng môi trường ảo để không bị xung đột phiên bản với các dự án khác:
+```bash
+python -m venv venv
 
-### 3. Cách hệ thống hoạt động
+# Kích hoạt trên Windows:
+venv\Scripts\activate
 
-#### 3.1. Luồng xử lý chính (runtime)
+# Kích hoạt trên macOS/Linux:
+source venv/bin/activate
+```
 
-File chính: `main.py`
+### Bước 2: Cài đặt các thư viện cần dùng
+Sử dụng file `requirements.txt`:
+```bash
+pip install -r requirements.txt
+```
 
-1. **Khởi tạo mô hình**
-   - Tạo đối tượng `TrafficDetector` (trong `detection.py`) để:
-     - Load các model YOLO: `vehicle.pt`, `traffic_light.pt`, `helmet.pt` từ thư mục `models/`.
-   - Tạo đối tượng `ViolationChecker` (trong `traffic_violation.py`) với tham số:
-     - `stop_line_y`: tọa độ y của **vạch dừng ảo** trên khung hình.
-     - Giá trị này cần chỉnh để **trùng với vạch sơn thực tế** trong video (ví dụ: 550, 580, 600, ...).
+### Bước 3: Chuẩn bị mô hình (Trọng số YOLO)
+Hệ thống mặc định yêu cầu thư mục `models/` phải có sẵn file trọng số. Nếu chưa có, bạn cần:
+1. Tạo thư mục con tên là `models` ở đường dẫn chứa file `main.py`.
+2. Đặt trọng số được train (model YOLO của bạn): `vehicle.pt`, `traffic_light.pt` vào trong thư mục `models/`.
 
-2. **Đọc video đầu vào**
-   - Dùng `cv2.VideoCapture("16h15.15.9.22.mp4")` để mở file video.
-
-3. **Xử lý từng frame**
-   - Với mỗi frame lấy được từ video:
-     1. Gọi `detector.detect_all(frame)`:
-        - **Stage phát hiện xe**:
-          - YOLO `vehicle.pt` phát hiện các phương tiện.
-          - Kết quả mỗi xe gồm: `box = [x1, y1, x2, y2]`, `type` (loại xe), `has_helmet` (ban đầu `None`).
-        - **Kiểm tra mũ bảo hiểm cho xe máy**:
-          - Nếu `type == 'motorbike'`, cắt vùng ROI quanh người lái.
-          - Chạy model `helmet.pt` trên ROI để xem có mũ bảo hiểm hay không.
-          - Gán `has_helmet = 'no_helmet'` nếu phát hiện không đội mũ.
-        - **Stage nhận diện đèn giao thông**:
-          - YOLO `traffic_light.pt` phát hiện đèn và trả về `status` (`red`, `green`, ...).
-        - Hàm trả về:
-          - `detections`: danh sách xe + bounding box + trạng thái mũ bảo hiểm.
-          - `lights`: danh sách đèn + bounding box + `status`.
-
-     2. Gọi `checker.process(frame, detections, lights)`:
-        - Lấy trạng thái đèn hiện tại (`current_status`), ví dụ `"red"` hoặc `"green"`.
-        - Vẽ **vạch dừng ảo** ngang khung hình tại `stop_line_y`:
-          - Màu **đỏ** nếu đèn đang đỏ.
-          - Màu **xanh lá** nếu đèn không đỏ.
-        - Vẽ text trạng thái đèn: `LIGHT: RED` hoặc tương tự ở góc màn hình.
-
-        - Với mỗi phương tiện trong `detections`:
-          - Lấy vị trí bounding box `(x1, y1, x2, y2)`.
-
-          **a. Kiểm tra vượt đèn đỏ**
-          - Nếu:
-            - `current_status.lower() == "red"` (đèn đỏ) **và**
-            - `y2 > stop_line_y - 5` (đuôi xe vượt qua vạch dừng),
-          - Thì:
-            - Vẽ khung đỏ quanh xe
-            - Ghi text: `"VI PHAM: VUOT DEN DO"`.
-            - Lưu **ảnh bằng chứng** vào thư mục `evidence/` với tên dạng `red_light_HHMMSS_xxxxxx.jpg`.
-            - Phát tiếng **beep** bằng `winsound.Beep(...)`.
-
-          **b. Kiểm tra mũ bảo hiểm**
-          - Nếu `has_helmet == 'no_helmet'`:
-            - Ghi text `"NO HELMET"` phía trên xe để cảnh báo.
-
-        - Hàm trả về `frame` đã được vẽ đầy đủ thông tin (vạch, bbox, text, ...).
-
-     3. Hiển thị frame kết quả:
-        - Dùng `cv2.imshow(...)` để xem trực tiếp.
-        - Nhấn phím `q` để thoát vòng lặp.
-
-4. **Kết thúc**
-   - Giải phóng video (`cap.release()`).
-   - Đóng toàn bộ cửa sổ OpenCV (`cv2.destroyAllWindows()`).
-
-#### 3.2. Tóm tắt luồng xử lý
-
-- **Input**: Video giao thông (`16h15.15.9.22.mp4`).
-- **Xử lý**:
-  - YOLO phát hiện xe + đèn + mũ bảo hiểm.
-  - Kiểm tra vị trí xe so với vạch dừng khi đèn đỏ.
-  - Kiểm tra trạng thái đội mũ bảo hiểm.
-- **Output**:
-  - Video hiển thị real-time với bounding box và cảnh báo.
-  - Thư mục `evidence/` chứa ảnh chụp lại các trường hợp vi phạm.
-  - Âm thanh cảnh báo khi có vi phạm.
-
----
-
-### 4. Huấn luyện mô hình (train_all.py)
-
-File `train_all.py` dùng để **huấn luyện lại các model YOLO**:
-
-- Gồm danh sách 4 task:
-  - `vehicle_model`: dữ liệu trong `data/vehicle_data/vehicle.yaml`.
-  - `light_model`: dữ liệu trong `data/traffic_light_data/traffic_light.yaml`.
-  - `plate_model`: dữ liệu trong `data/plate_data/plate.yaml`.
-  - `helmet_model`: dữ liệu trong `data/helmet_data/helmet.yaml`.
-
-- Với mỗi task:
-  - Khởi tạo `YOLO("yolo11n.pt")` (model base).
-  - Gọi `model.train(...)` với:
-    - `data`: đường dẫn file YAML.
-    - `epochs`: số epoch (ví dụ 100).
-    - `imgsz`: kích thước ảnh (640 hoặc 416).
-    - `batch`: batch size.
-    - `device=0`: dùng GPU (CUDA).
-    - `name`: tên experiment (lưu trong `runs/detect/`).
-
-Sau khi train xong, bạn có thể copy các file `.pt` đã train vào thư mục `models/` để dùng trong `detection.py`.
-
----
-
-### 5. Cách chạy nhanh
-
-#### 5.1. Cài đặt môi trường
-
-1. Tạo và kích hoạt môi trường ảo (khuyến khích):
-   ```bash
-   python -m venv .venv
-   .venv\Scripts\activate
-   ```
-
-2. Cài đặt thư viện:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. Chuẩn bị model:
-   - Tạo thư mục `models/` (nếu chưa có).
-   - Đặt các file:
-     - `vehicle.pt`
-     - `traffic_light.pt`
-     - `helmet.pt`
-     - (tuỳ chọn) `plate.pt`
-   - vào trong thư mục `models/` cùng cấp với các file `.py`.
-
-4. Đặt video test:
-   - Đảm bảo file `16h15.15.9.22.mp4` nằm cùng thư mục với `main.py`, hoặc sửa lại đường dẫn trong code.
-
-#### 5.2. Chạy chương trình
-
+### Bước 4: Chạy dự án
+Đảm bảo bạn có file video (ví dụ `16h15.15.9.22.mp4`) để chạy thử ở thư mục hiện hành. Sau đó chạy lệnh:
 ```bash
 python main.py
 ```
 
-- Một cửa sổ sẽ bật lên hiển thị video kèm:
-  - Vạch dừng ảo.
-  - Trạng thái đèn.
-  - Bounding box quanh xe.
-  - Cảnh báo `"VI PHAM: VUOT DEN DO"` và/hoặc `"NO HELMET"` nếu phát hiện vi phạm.
-- Nhấn phím `q` để thoát chương trình.
-
----
-
-### 6. Ghi chú
-
-- **Hiệu chỉnh vạch dừng**:
-  - Tham số `stop_line_y` trong `main.py` / `ViolationChecker` rất quan trọng.
-  - Cần điều chỉnh cho trùng vị trí vạch trên từng video khác nhau.
-
-- **Hiệu năng**:
-  - Nên chạy trên máy có GPU (RTX) để tốc độ real-time mượt hơn.
-  - Trong `detection.py` có thể tinh chỉnh tham số `imgsz`, `stream` để tối ưu.
-
-- **Mở rộng**:
-  - Có thể kết hợp module đọc biển số (plate) để:
-    - Tự động trích xuất biển số từ các frame vi phạm.
-    - Lưu kèm text biển số vào log/báo cáo.
-
+*Lưu ý khi sử dụng*: 
+- Trọng số và nguồn video tuỳ chỉnh có thể thay đổi bằng việc cập nhật source code ở khai báo nguồn `cv2.VideoCapture("...")` bên trong `main.py`.
+- Tuỳ chỉnh toạ độ vạch dừng thẳng đứng (`stop_line_y=380`) bằng cách thay đổi giá trị trong lần gọi `ViolationChecker(stop_line_y=380)` để khớp nhất với phối cảnh video của riêng bạn.
+- Bạn có thể nhấn phím `q` tại giao diện video đang chạy bất cứ lúc nào để thoát ứng dụng khẩn cấp.
